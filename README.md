@@ -17,17 +17,22 @@ Replace this paragraph with your own summary of what your version does.
 
 ## How The System Works
 
-Explain your design in plain language.
+My recommendation system suggests songs by comparing each song’s features—such as genre, mood, energy, and tempo—with a user’s listening preferences stored in their UserProfile, which includes liked songs, skipped songs, and favorite styles. The Recommender assigns a score to each song based on how closely it matches the user’s taste, giving higher scores to songs with similar characteristics. After scoring all songs, the system ranks them from highest to lowest and recommends the top results, while avoiding repeats and occasionally introducing new songs to keep recommendations fresh.
 
-Some prompts to answer:
+Algorithm Recipe
 
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-- What information does your `UserProfile` store
-- How does your `Recommender` compute a score for each song
-- How do you choose which songs to recommend
+Each song is scored based on how well it matches the user’s preferences:
 
-You can include a simple diagram or bullet list if helpful.
++2.0 points for a genre match
++1.0 point for a mood match
+Energy similarity score based on how close the song’s energy is to the user’s target (closer = higher score)
+(Optional) Additional small weights for features like danceability or acousticness
+
+After scoring all songs, the system ranks them from highest to lowest and recommends the top K songs. Songs the user has already listened to can be filtered out to keep recommendations fresh.
+
+Potential Biases
+
+This system may over-prioritize genre matches, potentially ignoring songs from different genres that still fit the user’s mood or energy preferences. It may also favor songs with similar feature values, limiting diversity and reducing exposure to new or unexpected music.
 
 ---
 
