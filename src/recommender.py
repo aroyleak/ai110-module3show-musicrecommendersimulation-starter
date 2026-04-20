@@ -1,5 +1,6 @@
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
+import csv
 
 @dataclass
 class Song:
@@ -139,52 +140,77 @@ def score_mood(song_mood: str, favorite_mood: str) -> float:
 # COMBINED SCORING - Weighted combination of energy and mood
 # ============================================================================
 
-def score_song(
-    song: Song,
-    user: UserProfile,
-    energy_weight: float = 0.6,
-    mood_weight: float = 0.4,
-    energy_method: str = "quadratic"
-) -> float:
+def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
     """
-    Calculate a comprehensive recommendation score for a song given a user profile.
+    Score a single song against user preferences using the Algorithm Recipe.
     
-    Formula (default weights):
-        total_score = (0.6 × energy_score) + (0.4 × mood_score)
+    ALGORITHM RECIPE:
+    - Genre match: +2.0 points
+    - Mood match: +1.0 point
+    - Energy similarity: up to +1.0 point (based on closeness to target energy)
+    - Bonus: Acousticness bonus up to +0.5 points (if user likes acoustic songs)
     
     Args:
-        song: A Song object with 'energy' (float) and 'mood' (str) fields
-        user: A UserProfile object with 'target_energy' (float) and 'favorite_mood' (str) fields
-        energy_weight: Weight for energy component (default 0.6)
-        mood_weight: Weight for mood component (default 0.4)
-        energy_method: "linear" or "quadratic" scoring for energy (default "quadratic")
-        
+        user_prefs: Dict with keys 'genre', 'mood', 'energy' (and optionally 'likes_acoustic')
+                   Example: {"genre": "pop", "mood": "happy", "energy": 0.8}
+        song: Dict with song data from CSV (including 'genre', 'mood', 'energy', etc.)
+    
     Returns:
-        A score in [0.0, 1.0] where 1.0 is the best possible recommendation
-        
-    Raises:
-        ValueError: If energy_method is not "linear" or "quadratic"
-        AssertionError: If weights don't sum to 1.0 (with small tolerance for float precision)
+        Tuple of (score: float, reasons: List[str])
+        - score: Total points (0.0 to 4.5+)
+        - reasons: List of explanation strings for transparency
+    
+    Example:
+        score, reasons = score_song(
+            {"genre": "pop", "mood": "happy", "energy": 0.8},
+            {"genre": "pop", "mood": "happy", "energy": 0.82, "title": "Sunrise City", ...}
+        )
+        # Returns: (4.98, ["Genre match: pop (+2.0)", "Mood match: happy (+1.0)", ...])
     """
-    # Validate inputs
-    assert abs(energy_weight + mood_weight - 1.0) < 1e-6, \
-        f"Weights must sum to 1.0, got {energy_weight + mood_weight}"
+    score = 0.0
+    reasons = []
     
-    if energy_method not in ("linear", "quadratic"):
-        raise ValueError(f"energy_method must be 'linear' or 'quadratic', got '{energy_method}'")
+    # Extract user preferences
+    user_genre = user_prefs.get("genre", "").lower().strip()
+    user_mood = user_prefs.get("mood", "").lower().strip()
+    user_energy = user_prefs.get("energy", 0.5)
+    likes_acoustic = user_prefs.get("likes_acoustic", False)
     
-    # Calculate component scores
-    if energy_method == "linear":
-        energy_score = score_energy_linear(song.energy, user.target_energy)
-    else:  # quadratic
-        energy_score = score_energy_quadratic(song.energy, user.target_energy)
+    # Extract song attributes
+    song_genre = song.get("genre", "").lower().strip()
+    song_mood = song.get("mood", "").lower().strip()
+    song_energy = float(song.get("energy", 0.5))
+    song_acousticness = float(song.get("acousticness", 0.0))
+    song_title = song.get("title", "Unknown")
     
-    mood_score = score_mood(song.mood, user.favorite_mood)
+    # ========== SCORING LOGIC ==========
     
-    # Weighted combination
-    total_score = (energy_weight * energy_score) + (mood_weight * mood_score)
+    # 1. GENRE MATCH: +2.0 points for exact match
+    if user_genre and song_genre == user_genre:
+        score += 2.0
+        reasons.append(f"Genre match: {song_genre} (+2.0)")
     
-    return total_score
+    # 2. MOOD MATCH: +1.0 point for exact match
+    if user_mood and song_mood == user_mood:
+        score += 1.0
+        reasons.append(f"Mood match: {song_mood} (+1.0)")
+    
+    # 3. ENERGY SIMILARITY: up to +1.0 point based on distance
+    #    Score = 1.0 - |song_energy - user_energy|
+    #    If energy matches exactly, +1.0. If off by 0.5, +0.5, etc.
+    energy_distance = abs(song_energy - user_energy)
+    energy_points = max(0.0, 1.0 - energy_distance)
+    score += energy_points
+    reasons.append(f"Energy similarity (target: {user_energy}, song: {song_energy}) (+{energy_points:.2f})")
+    
+    # 4. BONUS: ACOUSTICNESS
+    #    If user likes acoustic music, reward high acousticness
+    if likes_acoustic and song_acousticness >= 0.5:
+        acoustic_bonus = song_acousticness * 0.5  # up to +0.5
+        score += acoustic_bonus
+        reasons.append(f"Acoustic bonus (acousticness: {song_acousticness:.2f}) (+{acoustic_bonus:.2f})")
+    
+    return score, reasons
 
 
 class Recommender:
@@ -205,18 +231,110 @@ class Recommender:
 
 def load_songs(csv_path: str) -> List[Dict]:
     """
-    Loads songs from a CSV file.
-    Required by src/main.py
+    Loads songs from a CSV file and converts numerical values to appropriate types.
+    
+    Args:
+        csv_path: Path to the CSV file (e.g., "data/songs.csv")
+    
+    Returns:
+        A list of dictionaries, one per song, with numerical fields converted to float/int.
+        
+    Example:
+        songs = load_songs("data/songs.csv")
+        # Returns: [
+        #   {'id': 1, 'title': 'Sunrise City', 'artist': 'Neon Echo', ..., 'energy': 0.82, 'tempo_bpm': 118},
+        #   ...
+        # ]
     """
-    # TODO: Implement CSV loading logic
-    print(f"Loading songs from {csv_path}...")
-    return []
+    songs = []
+    
+    # Fields that should be converted to floats (for math operations)
+    float_fields = {'energy', 'valence', 'danceability', 'acousticness', 'tempo_bpm'}
+    
+    # Fields that should be converted to integers
+    int_fields = {'id', 'tempo_bpm'}
+    
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Convert numerical fields
+                for field in float_fields:
+                    if field in row and row[field]:
+                        row[field] = float(row[field])
+                
+                # tempo_bpm should be integer (already converted to float above, so cast to int)
+                if 'tempo_bpm' in row:
+                    row['tempo_bpm'] = int(float(row['tempo_bpm']))
+                
+                # id should be integer
+                if 'id' in row:
+                    row['id'] = int(row['id'])
+                
+                songs.append(row)
+        
+        print(f"✓ Loaded {len(songs)} songs from {csv_path}")
+        return songs
+    
+    except FileNotFoundError:
+        print(f"✗ Error: Could not find file {csv_path}")
+        return []
+    except Exception as e:
+        print(f"✗ Error loading songs: {e}")
+        return []
 
 def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
     """
-    Functional implementation of the recommendation logic.
-    Required by src/main.py
+    Recommends the top k songs for a user based on their preferences.
+    
+    Algorithm:
+    1. Score every song in the catalog using score_song()
+    2. Sort all scored songs by score (highest first)
+    3. Return the top k results with explanations
+    
+    Args:
+        user_prefs: User preferences dict with keys 'genre', 'mood', 'energy'
+        songs: List of song dicts loaded from CSV
+        k: Number of recommendations to return (default 5)
+    
+    Returns:
+        List of tuples: [(song_dict, score, explanation), ...]
+        - Sorted from highest to lowest score
+        - Limited to k results
+        - explanation is a formatted string joining all reasons
+    
+    Example:
+        recommendations = recommend_songs(
+            {"genre": "pop", "mood": "happy", "energy": 0.8},
+            songs,
+            k=5
+        )
+        # Returns: [
+        #   (song1_dict, 4.98, "Genre match: pop (+2.0). Mood match: happy (+1.0). ..."),
+        #   (song2_dict, 3.45, "Energy similarity (target: 0.8, song: 0.75) (+0.75). ..."),
+        #   ...
+        # ]
     """
-    # TODO: Implement scoring and ranking logic
-    # Expected return format: (song_dict, score, explanation)
-    return []
+    # Step 1: Score every song
+    # Create a list of tuples: (song, score, reasons_list)
+    scored_songs = []
+    for song in songs:
+        score, reasons = score_song(user_prefs, song)
+        scored_songs.append((song, score, reasons))
+    
+    # Step 2: Sort by score (highest first) using sorted() - returns new list
+    # sorted() is preferred over .sort() because:
+    # - It returns a NEW sorted list (non-destructive)
+    # - We can chain operations: sorted(..., key=..., reverse=True)
+    # - It works on any iterable, not just lists
+    # - .sort() modifies the list in-place, which can be dangerous
+    ranked_songs = sorted(scored_songs, key=lambda x: x[1], reverse=True)
+    
+    # Step 3: Take top k and format with explanations
+    recommendations = []
+    for song, score, reasons in ranked_songs[:k]:
+        # Join all reasons into a single readable explanation
+        explanation = " | ".join(reasons)
+        recommendations.append((song, score, explanation))
+    
+    return recommendations

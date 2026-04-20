@@ -17,17 +17,155 @@ Replace this paragraph with your own summary of what your version does.
 
 ## How The System Works
 
-Explain your design in plain language.
+### System Overview
 
-Some prompts to answer:
+This is a **content-based recommender system** (not collaborative filtering). Users provide their music preferences via a form, which are compared against songs in the dataset using a transparent scoring algorithm.
 
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-- What information does your `UserProfile` store
-- How does your `Recommender` compute a score for each song
-- How do you choose which songs to recommend
+### Song Features
 
-You can include a simple diagram or bullet list if helpful.
+Each song in `data/songs.csv` contains:
+- **Genre** - Musical category (pop, lofi, rock, ambient, synthwave, jazz, country, grime, disco, reggae, orchestral, breakbeat)
+- **Mood** - Emotional tone (happy, chill, intense, relaxed, focused, moody)
+- **Energy** - Intensity level (0.0–1.0 scale)
+- **Tempo (BPM)** - Beats per minute (60–152 BPM range)
+- **Valence** - Positivity/brightness (0.0–1.0 scale)
+- **Danceability** - How suitable for dancing (0.0–1.0 scale)
+- **Acousticness** - Proportion of acoustic instruments (0.0–1.0 scale)
+
+### User Profile
+
+The `UserProfile` captures three core preferences:
+- `preferred_genre` - The genre the user wants to hear
+- `preferred_mood` - The emotional vibe they're seeking
+- `target_energy` - How energetic/intense they want the music (0.0–1.0)
+
+### Scoring Algorithm (The Recipe)
+
+For each song in the catalog, the system calculates a **final score** using this formula:
+
+```
+FINAL_SCORE = 
+    (genre_match × 2.0) +
+    (mood_match × 1.0) +
+    (energy_similarity × 1.0) +
+    (tempo_bonus × 0.5) +
+    (audio_features_bonus × 0.25)
+
+Score Range: 0.0 to 5.0 points (realistic max: ~4.0)
+```
+
+**Point Breakdown:**
+
+| Factor | Points | Logic |
+|--------|--------|-------|
+| **Genre Match** | +2.0 | Exact match on user's preferred genre |
+| **Mood Match** | +1.0 | Exact match on user's preferred mood |
+| **Energy Similarity** | Up to +1.0 | Scaled by proximity: `1.0 - abs(song_energy - target_energy)` |
+| **Tempo Bonus** | +0.5 | Award if within 10% of user's tempo preference |
+| **Audio Features** | +0.25 | Bonus if specific danceability/valence preferences met |
+
+**Example Calculation:**
+
+User wants: **pop** genre, **happy** mood, **0.80** energy
+
+Song: "Sunrise City" (pop, happy, 0.82 energy)
+- Genre match: +2.0 ✓
+- Mood match: +1.0 ✓
+- Energy similarity: 1.0 - |0.82 - 0.80| = +0.98 ✓
+- **Total: 4.98 points** (Highly recommended!)
+
+### Recommendation Selection
+
+1. Score all 17 songs using the formula above
+2. Sort by score (highest first)
+3. Return **top 5** recommendations
+4. Filter by confidence threshold:
+   - **High Confidence** (≥3.5 points): "Highly Recommended"
+   - **Medium Confidence** (2.5–3.4 points): "Recommended"
+   - **Low Confidence** (<2.5 points): "Alternatives"
+
+### Sample Output
+
+Running the recommender with the default user profile (pop/happy/0.8 energy):
+
+```bash
+$ python src/main.py
+
+✓ Loaded 17 songs from data/songs.csv
+
+================================================================================
+🎵 MUSIC RECOMMENDER SIMULATION
+================================================================================
+
+📋 Your Profile:
+   • Favorite Genre: POP
+   • Favorite Mood: HAPPY
+   • Target Energy: 0.8
+
+🏆 Top 5 Recommendations:
+
+--------------------------------------------------------------------------------
+
+#1 Sunrise City
+    Artist: Neon Echo
+    Score: 3.98/4.5 ⭐
+    Why: Genre match: pop (+2.0) | Mood match: happy (+1.0) | Energy similarity (target: 0.8, 
+song: 0.82) (+0.98)
+
+#2 Gym Hero
+    Artist: Max Pulse
+    Score: 2.87/4.5 ⭐
+    Why: Genre match: pop (+2.0) | Energy similarity (target: 0.8, song: 0.93) (+0.87)
+
+#3 Rooftop Lights
+    Artist: Indigo Parade
+    Score: 1.96/4.5 ⭐
+    Why: Mood match: happy (+1.0) | Energy similarity (target: 0.8, song: 0.76) (+0.96)
+
+#4 Disco Fever
+    Artist: Vinyl Legends
+    Score: 1.91/4.5 ⭐
+    Why: Mood match: happy (+1.0) | Energy similarity (target: 0.8, song: 0.89) (+0.91)
+
+#5 Summer Vibes
+    Artist: Reggae Sunset
+    Score: 1.84/4.5 ⭐
+    Why: Mood match: happy (+1.0) | Energy similarity (target: 0.8, song: 0.64) (+0.84)
+
+================================================================================
+```
+
+**Interpretation:**
+- **#1 Winner: "Sunrise City"** - Perfect score because it matches all three key factors (genre=pop, mood=happy, energy≈0.8)
+- **#2 "Gym Hero"** - Also pop genre but intense mood (not happy), so it only gets genre + energy points
+- **#3-5 "Rooftop Lights", "Disco Fever", "Summer Vibes"** - Happy mood matches but different genres, so they rank lower per our algorithm (genre worth 2.0 points vs mood's 1.0)
+
+This demonstrates that **genre is the primary driver** of recommendations in our current weighting scheme. See "Known Biases" for discussion.
+
+---
+
+### Expected Biases & Limitations
+
+⚠️ **Known Issues:**
+
+1. **Genre Over-Prioritization** - Genre gets 2.0 points vs. mood's 1.0 point. This means the system **heavily favors exact genre matches**, potentially ignoring excellent cross-genre recommendations. A song with perfect mood/energy but wrong genre will score poorly.
+
+2. **Limited Genre Diversity** - Only 12 unique genres in catalog, mostly Western music. Users seeking niche genres (metal, k-pop, classical) won't find matches.
+
+3. **Energy Bias** - The algorithm assumes users always want their exact target energy. A user seeking "0.75 energy pop" might miss a great "0.65 energy pop" song with perfect mood/lyrics.
+
+4. **Mood Ceiling** - Only 6 moods in dataset. Real emotion is more nuanced. A user feeling "bittersweet" or "nostalgic" has no exact match.
+
+5. **No Lyrical Understanding** - Ignores lyrics, themes, and cultural context. A song titled "Midnight Rain" might match a mood better than its audio features suggest.
+
+6. **Cold Start Problem** - New/small catalog (17 songs) means first-time users may see limited options, especially for niche preferences.
+
+7. **No User History** - System doesn't learn from what users actually listened to vs. what was recommended. All users treated equally.
+
+**Potential Fairness Issues:**
+- Artists/genres with fewer songs in dataset are under-recommended
+- Majority genres (pop, lofi) dominate recommendations
+- Could reinforce "filter bubbles" if users always pick the same genre 
 
 ---
 
