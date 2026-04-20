@@ -1,111 +1,57 @@
-# 🎧 Model Card: Music Recommender Simulation
+# Model Card: Music Recommender Simulation
 
-## 1. Model Name  
+## 1. Model Name
 
-Give your model a short, descriptive name.  
-Example: **VibeFinder 1.0**  
-
----
-
-## 2. Intended Use  
-
-Describe what your recommender is designed to do and who it is for. 
-
-Prompts:  
-
-- What kind of recommendations does it generate  
-- What assumptions does it make about the user  
-- Is this for real users or classroom exploration  
+**VibeMatch Mini** — a tiny rule-based helper that ranks songs for a made-up listener.
 
 ---
 
-## 3. How the Model Works  
+## 2. Goal / Task
 
-Explain your scoring approach in simple language.  
-
-Prompts:  
-
-- What features of each song are used (genre, energy, mood, etc.)  
-- What user preferences are considered  
-- How does the model turn those into a score  
-- What changes did you make from the starter logic  
-
-Avoid code here. Pretend you are explaining the idea to a friend who does not program.
+The system suggests which songs in a small catalog best fit one user at a time. It does not predict streams or revenue. It scores each song and returns the top few titles that match the user’s genre, mood, and energy settings.
 
 ---
 
-## 4. Data  
+## 3. Data Used
 
-Describe the dataset the model uses.  
-
-Prompts:  
-
-- How many songs are in the catalog  
-- What genres or moods are represented  
-- Did you add or remove data  
-- Are there parts of musical taste missing in the dataset  
+The catalog lives in `data/songs.csv`. It has **10** songs right now. Each row has title, artist, genre, mood, energy, tempo (BPM), valence, danceability, and acousticness. Genres include pop, lofi, rock, ambient, jazz, synthwave, and indie pop. Moods include happy, chill, intense, relaxed, moody, and focused. The list is fake and small, so it cannot stand for all music or all listeners.
 
 ---
 
-## 5. Strengths  
+## 4. Algorithm Summary
 
-Where does your system seem to work well  
-
-Prompts:  
-
-- User types for which it gives reasonable results  
-- Any patterns you think your scoring captures correctly  
-- Cases where the recommendations matched your intuition  
+Each song gets points from simple rules. If the song’s genre matches the user’s favorite genre, it gets **+2** points. If the mood matches, it gets **+1** point. Energy adds up to **+1** more: the closer the song’s energy is to the user’s target energy, the bigger that slice of the score (far away gives little or nothing). Then every song is sorted by total score, highest first, and the program returns the top **K** results. It also keeps short text reasons for each score, like “genre match” or “energy close.”
 
 ---
 
-## 6. Limitations and Bias 
+## 5. Observed Behavior / Biases
 
-Where the system struggles or behaves unfairly. 
-
-Prompts:  
-
-- Features it does not consider  
-- Genres or moods that are underrepresented  
-- Cases where the system overfits to one preference  
-- Ways the scoring might unintentionally favor some users  
+Genre counts a lot because it is worth the most points. That can bury good “vibe matches” in other genres. Energy can lift songs high even when genre or mood does not match, so the top list can look same-y in a tiny catalog. Some labels are strict (for example, “indie pop” is not treated as plain “pop”), which can feel unfair even if the math is consistent. The data skews toward a few moods and genres, so users who love underrepresented styles get weaker or odd picks.
 
 ---
 
-## 7. Evaluation  
+## 6. Evaluation Process
 
-How you checked whether the recommender behaved as expected. 
-
-Prompts:  
-
-- Which user profiles you tested  
-- What you looked for in the recommendations  
-- What surprised you  
-- Any simple tests or comparisons you ran  
-
-No need for numeric metrics unless you created some.
+I tried a few pretend users: **High-Energy Pop** (pop, happy, high energy), **Chill Lofi** (lofi, chill, lower energy), and **Deep Intense Rock** (rock, intense, high energy). I ran the CLI, read the top five, and checked if the order matched my gut. Pop and lofi profiles usually looked sensible. Rock only had one clear rock song, so the rest of the list was mostly “whatever scored next,” which was a good warning about small data. I also imagined changing the rules (for example, caring less about genre) and noticed how much that would change the leaderboard without any fancy math.
 
 ---
 
-## 8. Future Work  
+## 7. Intended Use and Non-Intended Use
 
-Ideas for how you would improve the model next.  
+**Intended use:** Learning and demos. Running the program locally to see how hand-written rules turn preferences into a ranked list and explanations.
 
-Prompts:  
-
-- Additional features or preferences  
-- Better ways to explain recommendations  
-- Improving diversity among the top results  
-- Handling more complex user tastes  
+**Non-intended use:** Do not use this as a real music product, a fairness audit for artists, or advice for mental health or identity. Do not use it to judge people or to make business or legal choices. It is not trained on real listener behavior and should not be sold or deployed as if it were.
 
 ---
 
-## 9. Personal Reflection  
+## 8. Ideas for Improvement
 
-A few sentences about your experience.  
+1. Add more songs and more genres so niche tastes are not empty.  
+2. Add a diversity rule so the top **K** are not all the same genre unless the user asked for that.  
+3. Fold in extra fields (tempo bands, valence, or acoustic taste) with small weights and clearer explanations.
 
-Prompts:  
+---
 
-- What you learned about recommender systems  
-- Something unexpected or interesting you discovered  
-- How this changed the way you think about music recommendation apps  
+## 9. Personal Reflection
+
+My biggest learning moment was seeing that **clear rules beat mystery**: once I knew the weights, I could predict why a song was on top, and when the list felt “wrong,” I could point to the rule that caused it. AI tools helped me scaffold the CSV loader and boilerplate fast, but I still had to **run the program and read the output** to catch things like import paths and edge cases the tools did not know about. What surprised me is how **a few if-then style pieces still feel like a “recommender”** in the terminal—scores and reasons read like a tiny version of Spotify’s “because you listened to…” line. If I extended the project, I would try **listening history** (skip recently shown artists) and a **second metric for variety** so the top list feels less repetitive.
