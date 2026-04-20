@@ -185,21 +185,21 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
     
     # ========== SCORING LOGIC ==========
     
-    # 1. GENRE MATCH: +2.0 points for exact match
+    # 1. GENRE MATCH: +1.5 points for exact match (reduced from 2.0)
     if user_genre and song_genre == user_genre:
-        score += 2.0
-        reasons.append(f"Genre match: {song_genre} (+2.0)")
+        score += 1.5
+        reasons.append(f"Genre match: {song_genre} (+1.5)")
     
-    # 2. MOOD MATCH: +1.0 point for exact match
+    # 2. MOOD MATCH: +1.5 points for exact match (increased from 1.0)
     if user_mood and song_mood == user_mood:
-        score += 1.0
-        reasons.append(f"Mood match: {song_mood} (+1.0)")
+        score += 1.5
+        reasons.append(f"Mood match: {song_mood} (+1.5)")
     
-    # 3. ENERGY SIMILARITY: up to +1.0 point based on distance
-    #    Score = 1.0 - |song_energy - user_energy|
-    #    If energy matches exactly, +1.0. If off by 0.5, +0.5, etc.
+    # 3. ENERGY SIMILARITY: up to +1.25 points based on distance (increased from 1.0)
+    #    Score = 1.25 * (1.0 - |song_energy - user_energy|)
+    #    If energy matches exactly, +1.25. If off by 0.5, +0.625, etc.
     energy_distance = abs(song_energy - user_energy)
-    energy_points = max(0.0, 1.0 - energy_distance)
+    energy_points = max(0.0, 1.25 * (1.0 - energy_distance))
     score += energy_points
     reasons.append(f"Energy similarity (target: {user_energy}, song: {song_energy}) (+{energy_points:.2f})")
     
